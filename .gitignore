@@ -1,0 +1,9 @@
+# Ignore Phaser full repository source
+phaser-4.2.1/
+
+# System / IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log

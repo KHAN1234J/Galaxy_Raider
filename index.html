@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+    <title>Galaxy Raider - Mobile Space Shooter</title>
+    <script>
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            const errDiv = document.createElement('div');
+            errDiv.style.position = 'absolute'; errDiv.style.top = '50px'; errDiv.style.left = '10px';
+            errDiv.style.background = 'red'; errDiv.style.color = 'white'; errDiv.style.zIndex = '9999';
+            errDiv.style.padding = '10px'; errDiv.style.fontSize = '12px'; errDiv.style.pointerEvents = 'none';
+            errDiv.innerText = 'ERROR: ' + msg + '\nLine: ' + lineNo + '\n' + (error ? error.stack : '');
+            document.body.appendChild(errDiv);
+            return false;
+        };
+    </script>
+    <style>
+        /* === LOCAL FONT === */
+        @font-face { font-family: 'Orbitron'; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/orbitron-400.ttf) format('truetype'); }
+        @font-face { font-family: 'Orbitron'; font-style: normal; font-weight: 700; font-display: swap; src: url(fonts/orbitron-700.ttf) format('truetype'); }
+        @font-face { font-family: 'Orbitron'; font-style: normal; font-weight: 900; font-display: swap; src: url(fonts/orbitron-900.ttf) format('truetype'); }
+
+        /* === RESET & BASE === */
+        *, *::before, *::after { box-sizing: border-box; }
+        body {
+            margin: 0; padding: 0; overflow: hidden;
+            background-color: #050510;
+            font-family: 'Orbitron', sans-serif;
+            touch-action: none; user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #gameCanvas { display: block; width: 100%; height: 100%; }
+
+        /* === ANIMATIONS === */
+        @keyframes slideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        @keyframes load { 0% { width: 0%; } 50% { width: 60%; } 100% { width: 100%; } }
+        @keyframes pulse-text { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* === UI LAYER === */
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+        }
+
+        /* === SCREENS === */
+        .screen {
+            pointer-events: auto; position: absolute; width: 100%; height: 100%;
+            display: none; flex-direction: column; justify-content: center; align-items: center;
+            background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px);
+            transition: opacity 0.3s ease; z-index: 10; padding: 20px; box-sizing: border-box;
+        }
+        .screen.active { display: flex; }
+
+        /* === NOTIFICATIONS === */
+        #notifications {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            display: flex; flex-direction: column; gap: 10px; z-index: 1000;
+            pointer-events: none; width: 90%; max-width: 300px;
+        }
+        .notification {
+            background: rgba(0, 0, 0, 0.95); border: 1px solid;
+            padding: 12px 20px; color: #fff; font-size: 0.8rem; text-align: center;
+            box-shadow: 0 0 15px rgba(0,0,0,0.8);
+            animation: slideDown 0.3s ease-out, fadeOut 0.5s ease-in 2.5s forwards;
+            border-radius: 4px; text-transform: uppercase; letter-spacing: 1px;
+        }
+        .notify-error { border-color: #ff0055; color: #ff0055; box-shadow: 0 0 10px rgba(255, 0, 85, 0.3); }
+        .notify-success { border-color: #00ff00; color: #00ff00; box-shadow: 0 0 10px rgba(0, 255, 0, 0.3); }
+
+        /* === BUTTONS === */
+        .btn {
+            background: linear-gradient(180deg, rgba(0, 255, 255, 0.1), rgba(0, 255, 255, 0.05));
+            border: 1px solid #00ffff; color: #00ffff; padding: 15px 30px; margin: 8px;
+            font-family: 'Orbitron', sans-serif; font-size: 1rem; text-transform: uppercase;
+            letter-spacing: 2px; cursor: pointer; transition: all 0.2s;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.1), inset 0 0 10px rgba(0, 255, 255, 0.05);
+            clip-path: polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%);
+            width: 100%; max-width: 300px; text-align: center; position: relative;
+            font-weight: 800; text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
+        }
+        .btn:active { transform: scale(0.95); background: rgba(0, 255, 255, 0.4); }
+        .btn-red {
+            border-color: #ff0055; color: #ff0055; background: rgba(255, 0, 85, 0.1);
+            box-shadow: 0 0 15px rgba(255, 0, 85, 0.1); text-shadow: 0 0 5px rgba(255, 0, 85, 0.5);
+        }
+        .btn-red:active { background: rgba(255, 0, 85, 0.4); }
+
+        /* === MENU PANEL === */
+        .menu-panel {
+            background: rgba(10, 15, 25, 0.95); border: 1px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid #00ffff; border-bottom: 3px solid #00ffff;
+            padding: 30px 20px; display: flex; flex-direction: column; align-items: center;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.8); backdrop-filter: blur(15px);
+            position: relative; border-radius: 4px; width: 100%; max-width: 500px;
+        }
+        .menu-panel::after {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+            background-size: 100% 4px; pointer-events: none; opacity: 0.3;
+        }
+
+        /* === HUD ELEMENTS === */
+        .pause-btn {
+            pointer-events: auto; background: rgba(0,0,0,0.5); border: 2px solid #00ffff;
+            color: #00ffff; width: 40px; height: 40px; display: flex; align-items: center;
+            justify-content: center; border-radius: 8px; cursor: pointer; transition: 0.2s;
+            font-weight: bold; box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+        }
+        .pause-btn:active { transform: scale(0.9); background: #00ffff; color: #000; }
+
+        .control-btn {
+            pointer-events: auto; background: rgba(0, 0, 0, 0.6); border: 2px solid #555;
+            color: #aaa; width: 70px; height: 70px; display: flex; align-items: center;
+            justify-content: center; border-radius: 50%; cursor: pointer; transition: 0.2s;
+            position: relative; backdrop-filter: blur(4px);
+        }
+        .control-btn.active {
+            border-color: #00ffff; color: #00ffff; box-shadow: 0 0 20px rgba(0, 255, 255, 0.4);
+            background: rgba(0, 40, 40, 0.8); transform: scale(1.05);
+        }
+        .control-btn:active { transform: scale(0.95); }
+        .control-badge {
+            position: absolute; top: 0; right: 0; background: #ff0055; color: white;
+            border-radius: 50%; width: 24px; height: 24px; font-size: 0.8rem;
+            display: flex; align-items: center; justify-content: center; border: 2px solid #222;
+        }
+        .key-hint { position: absolute; bottom: -20px; font-size: 0.7rem; color: #888; font-weight: bold; }
+        .hud-text { text-shadow: 0 0 5px currentColor; }
+
+        /* === SHOP === */
+        .shop-section { width: 100%; margin-bottom: 30px; }
+        .shop-header { color: #00ffff; border-bottom: 1px solid rgba(0, 255, 255, 0.3); margin-bottom: 15px; padding-bottom: 5px; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; }
+        .shop-grid { display: grid; grid-template-columns: 1fr; gap: 15px; margin-bottom: 20px; }
+        @media (min-width: 640px) { .shop-grid { grid-template-columns: repeat(2, 1fr); } }
+        .shop-item { border: 1px solid #333; padding: 20px; background: linear-gradient(135deg, rgba(20, 20, 25, 0.95) 0%, rgba(10, 10, 15, 0.98) 100%); display: flex; flex-direction: column; cursor: pointer; transition: 0.3s; position: relative; overflow: hidden; }
+        .shop-item.selected { border-color: #00ff00; box-shadow: 0 0 20px rgba(0, 255, 0, 0.2); transform: translateY(-3px); }
+        .shop-item.owned-pu { border-color: #d946ef; }
+        .shop-item.locked { opacity: 0.6; filter: grayscale(0.8); }
+
+        .stat-row { display: flex; align-items: center; margin-bottom: 4px; font-size: 0.7rem; color: #aaa; }
+        .stat-label { width: 40px; text-align: right; margin-right: 8px; font-weight: bold; }
+        .stat-track { flex-grow: 1; height: 4px; background: #333; border-radius: 2px; overflow: hidden; }
+        .stat-fill { height: 100%; background: #00ffff; width: 0%; transition: width 0.5s ease-out; box-shadow: 0 0 5px #00ffff; }
+
+        /* === BOOT SCREEN === */
+        #boot-screen { background: #000; z-index: 100; }
+        .loader-bar { width: 200px; height: 4px; background: #333; margin-top: 20px; position: relative; overflow: hidden; }
+        .loader-progress { position: absolute; top: 0; left: 0; height: 100%; width: 0%; background: #00ffff; box-shadow: 0 0 10px #00ffff; animation: load 2s ease-in-out forwards; }
+
+        /* === LEVEL NOTIFICATION === */
+        #level-notification {
+            position: absolute; top: 30%; width: 100%; text-align: center; font-size: 4rem; font-weight: 900; color: #00ffff;
+            text-shadow: 0 0 30px rgba(0, 255, 255, 0.8), 0 0 10px white;
+            opacity: 0; pointer-events: none; transition: opacity 0.5s; z-index: 20; letter-spacing: 10px;
+        }
+        #level-notification.show { opacity: 1; animation: pulse-text 2s infinite; }
+
+        /* === SLIDERS === */
+        .slider-container { width: 100%; margin: 15px 0; display: flex; flex-direction: column; align-items: flex-start; color: white; }
+        .slider-label { margin-bottom: 8px; font-size: 0.9rem; color: #00ffff; text-transform: uppercase; letter-spacing: 1px; display: flex; justify-content: space-between; width: 100%; }
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]:focus { outline: none; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 20px; width: 20px; border-radius: 50%; background: #00ffff; cursor: pointer; margin-top: -8px; box-shadow: 0 0 10px #00ffff; border: 2px solid #fff; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #333; border-radius: 2px; border: 1px solid #555; }
+
+        .status-icon { display: flex; align-items: center; margin-right: 15px; font-size: 0.8rem; color: #fff; background: rgba(0,0,0,0.6); padding: 4px 8px; border: 1px solid #555; border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); margin-bottom: 5px;}
+
+        /* === COMBO === */
+        #combo-container {
+            position: absolute; top: 15%; left: 50%; transform: translateX(-50%);
+            display: flex; flex-direction: column; align-items: center; opacity: 0; transition: opacity 0.3s;
+        }
+        #combo-container.active { opacity: 1; }
+        #combo-count { font-size: 1.5rem; font-weight: 900; color: #ffd700; text-shadow: 0 0 15px rgba(255, 215, 0, 0.8); font-style: italic; }
+        #combo-bar-bg { width: 150px; height: 6px; background: rgba(0,0,0,0.5); border: 1px solid #555; margin-top: 5px; border-radius: 3px; overflow: hidden; }
+        #combo-bar-fill { height: 100%; background: linear-gradient(90deg, #ffaa00, #ffff00); width: 100%; transition: width 0.1s linear; }
+
+        /* === RESPONSIVE TEXT === */
+        .title-text { font-size: 2.5rem; }
+        @media (min-width: 640px) { .title-text { font-size: 4rem; } }
+
+        /* ======================================== */
+        /* UTILITY CLASSES (replacing TailwindCSS)  */
+        /* ======================================== */
+
+        /* Display */
+        .flex { display: flex; }
+        .hidden { display: none; }
+        .block { display: block; }
+
+        /* Flex Direction */
+        .flex-col { flex-direction: column; }
+        .flex-1 { flex: 1 1 0%; }
+
+        /* Alignment */
+        .items-center { align-items: center; }
+        .items-start { align-items: flex-start; }
+        .items-end { align-items: flex-end; }
+        .justify-center { justify-content: center; }
+        .justify-between { justify-content: space-between; }
+
+        /* Gap */
+        .gap-2 { gap: 0.5rem; }
+        .gap-4 { gap: 1rem; }
+
+        /* Width & Height */
+        .w-full { width: 100%; }
+        .h-full { height: 100%; }
+        .w-10 { width: 2.5rem; }
+        .h-10 { height: 2.5rem; }
+        .w-32 { width: 8rem; }
+        .h-3 { height: 0.75rem; }
+        .h-8 { height: 2rem; }
+        .max-w-4xl { max-width: 56rem; }
+        .max-w-md { max-width: 28rem; }
+
+        /* Padding */
+        .p-4 { padding: 1rem; }
+        .px-4 { padding-left: 1rem; padding-right: 1rem; }
+        .py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+        .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+        .pt-2 { padding-top: 0.5rem; }
+        .pt-4 { padding-top: 1rem; }
+        .pb-4 { padding-bottom: 1rem; }
+
+        /* Margin */
+        .mb-1 { margin-bottom: 0.25rem; }
+        .mb-2 { margin-bottom: 0.5rem; }
+        .mb-4 { margin-bottom: 1rem; }
+        .mb-6 { margin-bottom: 1.5rem; }
+        .mb-8 { margin-bottom: 2rem; }
+        .mb-10 { margin-bottom: 2.5rem; }
+        .mb-12 { margin-bottom: 3rem; }
+        .mt-2 { margin-top: 0.5rem; }
+        .mt-3 { margin-top: 0.75rem; }
+        .mt-4 { margin-top: 1rem; }
+        .mt-8 { margin-top: 2rem; }
+        .mr-2 { margin-right: 0.5rem; }
+        .mr-3 { margin-right: 0.75rem; }
+        .ml-1 { margin-left: 0.25rem; }
+
+        /* Typography */
+        .text-xs { font-size: 0.75rem; line-height: 1rem; }
+        .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+        .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+        .text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+        .text-2xl { font-size: 1.5rem; line-height: 2rem; }
+        .text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
+        .text-4xl { font-size: 2.25rem; line-height: 2.5rem; }
+        .font-bold { font-weight: 700; }
+        .font-black { font-weight: 900; }
+        .font-mono { font-family: ui-monospace, SFMono-Regular, 'Courier New', monospace; }
+        .uppercase { text-transform: uppercase; }
+        .text-center { text-align: center; }
+        .tracking-widest { letter-spacing: 0.1em; }
+        .tracking-tight { letter-spacing: -0.025em; }
+        .leading-none { line-height: 1; }
+        .leading-tight { line-height: 1.25; }
+        .whitespace-nowrap { white-space: nowrap; }
+
+        /* Text Colors */
+        .text-white { color: #fff; }
+        .text-cyan-400 { color: #22d3ee; }
+        .text-cyan-200 { color: #a5f3fc; }
+        .text-green-400 { color: #4ade80; }
+        .text-yellow-400 { color: #facc15; }
+        .text-red-500 { color: #ef4444; }
+        .text-gray-400 { color: #9ca3af; }
+        .text-gray-500 { color: #6b7280; }
+        .text-gray-600 { color: #4b5563; }
+        .text-pink-400 { color: #f472b6; }
+        .text-purple-400 { color: #c084fc; }
+        .text-purple-100 { color: #f3e8ff; }
+        .text-transparent { color: transparent; }
+
+        /* Background Colors */
+        .bg-gray-800 { background-color: #1f2937; }
+        .bg-gray-900 { background-color: #111827; }
+        .bg-gray-900\/50 { background-color: rgba(17, 24, 39, 0.5); }
+        .bg-green-900\/20 { background-color: rgba(20, 83, 45, 0.2); }
+        .bg-yellow-900\/20 { background-color: rgba(120, 53, 15, 0.2); }
+        .bg-cyan-900\/40 { background-color: rgba(22, 78, 99, 0.4); }
+        .bg-purple-900\/40 { background-color: rgba(88, 28, 135, 0.4); }
+        .bg-yellow-600 { background-color: #ca8a04; }
+
+        /* Borders */
+        .border { border-width: 1px; border-style: solid; }
+        .border-t { border-top-width: 1px; border-top-style: solid; }
+        .border-b { border-bottom-width: 1px; border-bottom-style: solid; }
+        .border-t-2 { border-top-width: 2px; border-top-style: solid; }
+        .border-b-2 { border-bottom-width: 2px; border-bottom-style: solid; }
+        .border-gray-600 { border-color: #4b5563; }
+        .border-gray-700 { border-color: #374151; }
+        .border-green-500 { border-color: #22c55e; }
+        .border-cyan-400 { border-color: #22d3ee; }
+        .border-cyan-500 { border-color: #06b6d4; }
+        .border-cyan-900 { border-color: #164e63; }
+        .border-yellow-400 { border-color: #facc15; }
+        .border-yellow-700 { border-color: #a16207; }
+        .border-yellow-900 { border-color: #713f12; }
+        .border-red-500 { border-color: #ef4444; }
+        .border-purple-500 { border-color: #a855f7; }
+        .border-pink-400 { border-color: #f472b6; }
+        .rounded { border-radius: 0.25rem; }
+        .rounded-sm { border-radius: 0.125rem; }
+
+        /* Positioning */
+        .absolute { position: absolute; }
+        .relative { position: relative; }
+        .sticky { position: sticky; }
+        .top-0 { top: 0; }
+        .left-0 { left: 0; }
+        .bottom-6 { bottom: 1.5rem; }
+        .right-6 { right: 1.5rem; }
+        .z-10 { z-index: 10; }
+
+        /* Effects */
+        .opacity-80 { opacity: 0.8; }
+        .overflow-hidden { overflow: hidden; }
+        .overflow-y-auto { overflow-y: auto; }
+        .pointer-events-none { pointer-events: none; }
+        .pointer-events-auto { pointer-events: auto; }
+        .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        .transition-all { transition-property: all; transition-timing-function: ease; transition-duration: 150ms; }
+        .transition-colors { transition-property: color, background-color, border-color; transition-timing-function: ease; transition-duration: 150ms; }
+        .duration-200 { transition-duration: 200ms; }
+
+        /* Gradients */
+        .bg-gradient-to-b { background-image: linear-gradient(to bottom, var(--tw-gradient-from), var(--tw-gradient-via, var(--tw-gradient-from)), var(--tw-gradient-to)); }
+        .bg-gradient-to-r { background-image: linear-gradient(to right, var(--tw-gradient-from), var(--tw-gradient-to)); }
+        .from-cyan-300 { --tw-gradient-from: #67e8f9; }
+        .via-cyan-500 { --tw-gradient-via: #06b6d4; }
+        .to-blue-600 { --tw-gradient-to: #2563eb; }
+        .from-green-600 { --tw-gradient-from: #16a34a; }
+        .to-green-400 { --tw-gradient-to: #4ade80; }
+        .from-red-600 { --tw-gradient-from: #dc2626; }
+        .to-red-400 { --tw-gradient-to: #f87171; }
+
+        /* Text Clipping */
+        .bg-clip-text { -webkit-background-clip: text; background-clip: text; }
+
+        /* Space-Y */
+        .space-y-1 > * + * { margin-top: 0.25rem; }
+
+        /* Custom classes for complex Tailwind arbitrary values */
+        .title-glow { filter: drop-shadow(0 0 15px rgba(0,255,255,0.6)); }
+        .pause-glow { filter: drop-shadow(0 0 10px rgba(0,255,255,0.5)); }
+        .tracking-extra { letter-spacing: 0.2em; }
+        .shop-sticky-bg { background-color: #050510; }
+        .shop-max-w { max-width: 800px; }
+
+        /* Hover states */
+        .hover-cyan:hover { background-color: #06b6d4; color: #fff; }
+        .hover-yellow:hover { background-color: #eab308; }
+        .hover-purple:hover { background-color: #a855f7; }
+
+        /* Responsive */
+        @media (min-width: 768px) {
+            .md-text-6xl { font-size: 3.75rem; line-height: 1; }
+            .md-text-5xl { font-size: 3rem; line-height: 1; }
+            .md-text-4xl { font-size: 2.25rem; line-height: 2.5rem; }
+            .md-text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
+            .md-text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+            .md-w-48 { width: 12rem; }
+            .md-block { display: block; }
+        }
+
+        /* Filter utility */
+        .filter { /* Needed for drop-shadow to work */ }
+
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui-layer">
+        
+        <div id="notifications"></div>
+
+        <!-- BOOT SCREEN -->
+        <div id="boot-screen" class="screen active">
+            <h1 class="text-4xl md-text-6xl text-cyan-400 font-black tracking-widest mb-4 animate-pulse text-center">SYSTEM BOOT</h1>
+            <div class="text-xs text-gray-500 font-mono mb-8">INITIALIZING GALAXY RAIDER OS v9.1...</div>
+            <div class="loader-bar"><div class="loader-progress"></div></div>
+            <div class="mt-8 text-gray-500 text-xs animate-pulse">TAP OR PRESS KEY TO START</div>
+        </div>
+
+        <!-- MENU SCREEN -->
+        <div id="menu-screen" class="screen">
+            <div class="menu-panel">
+                <h1 class="title-text font-black text-transparent bg-clip-text bg-gradient-to-b from-cyan-300 via-cyan-500 to-blue-600 mb-2 title-glow tracking-tight text-center">GALAXY RAIDER</h1>
+                <p class="text-cyan-200 mb-10 tracking-extra text-xs uppercase opacity-80 border-t border-cyan-900 pt-2 w-full text-center">Tactical Space Defense</p>
+                <div class="flex flex-col gap-4 w-full items-center">
+                    <button class="btn" onclick="game.start()">LAUNCH MISSION</button>
+                    <button class="btn" onclick="game.openShop()">HANGAR BAY</button>
+                    <button class="btn" onclick="game.openSettings()">SYSTEMS</button>
+                </div>
+                <p id="high-score-display" class="mt-8 text-yellow-400 font-mono text-sm border border-yellow-900 bg-yellow-900\/20 px-4 py-2 rounded">HIGH SCORE: 0</p>
+            </div>
+        </div>
+
+        <!-- SHOP SCREEN -->
+        <div id="shop-screen" class="screen" style="justify-content: flex-start; padding-top: 20px; overflow-y: auto;">
+            <div class="w-full max-w-4xl px-4 flex flex-col items-center">
+                <div class="flex justify-between w-full shop-max-w items-end mb-6 border-b border-gray-700 pb-4 sticky top-0 shop-sticky-bg z-10 pt-4">
+                    <h2 class="text-2xl md-text-4xl text-white font-bold tracking-widest">HANGAR</h2>
+                    <div class="text-yellow-400 text-lg md-text-xl font-bold bg-yellow-900\/20 px-4 py-1 border border-yellow-700 rounded whitespace-nowrap">CR: <span id="shop-coins">0</span></div>
+                </div>
+                <div class="shop-section">
+                    <div class="shop-header">FIGHTER CLASS (MAX LVL 3)</div>
+                    <div id="ships-container" class="shop-grid"></div>
+                </div>
+                <div class="shop-section">
+                    <div class="shop-header">TACTICAL UPGRADES</div>
+                    <div id="powerups-container" class="shop-grid"></div>
+                </div>
+                <button class="btn btn-red mt-4 mb-12" onclick="game.openMenu()">RETURN TO MENU</button>
+            </div>
+        </div>
+
+        <!-- SETTINGS SCREEN -->
+        <div id="settings-screen" class="screen">
+            <div class="menu-panel w-full max-w-md">
+                <h2 class="text-2xl md-text-3xl text-white mb-8 tracking-widest border-b border-gray-700 pb-4 w-full text-center">SYSTEM SETTINGS</h2>
+                <div class="slider-container">
+                    <div class="slider-label"><span>SFX VOLUME</span><span id="sfx-vol-val">50%</span></div>
+                    <input type="range" id="sfx-slider" min="0" max="1" step="0.1" oninput="game.updateVolume('sfx')">
+                </div>
+                <div class="slider-container">
+                    <div class="slider-label"><span>MUSIC VOLUME</span><span id="music-vol-val">50%</span></div>
+                    <input type="range" id="music-slider" min="0" max="1" step="0.1" oninput="game.updateVolume('music')">
+                </div>
+                <div class="mt-8 text-xs text-gray-600 text-center">GALAXY RAIDER OS v9.1<br>AUTO-SAVE PROTOCOL: ACTIVE</div>
+                <button class="btn btn-red mt-8" onclick="game.openMenu()">BACK</button>
+            </div>
+        </div>
+
+        <!-- PAUSE SCREEN -->
+        <div id="pause-screen" class="screen">
+            <h2 class="text-4xl md-text-5xl text-cyan-400 font-bold mb-12 tracking-widest pause-glow">SYSTEM PAUSED</h2>
+            <button class="btn" onclick="game.togglePause()">RESUME</button>
+            <button class="btn btn-red" onclick="game.quitToMenu()">ABORT MISSION</button>
+        </div>
+
+        <!-- HUD -->
+        <div id="hud" class="absolute top-0 left-0 w-full p-4 h-full pointer-events-none hidden">
+            <div class="flex justify-between items-start w-full">
+                <div class="flex flex-col">
+                    <span class="text-white text-xl font-bold hud-text tracking-widest">SCORE: <span id="score-display">0</span></span>
+                    <div class="w-32 md-w-48 h-3 bg-gray-900 border border-gray-600 mt-2 rounded-sm relative overflow-hidden" style="box-shadow: 0 0 10px rgba(0,0,0,0.5)">
+                        <div id="health-bar" class="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-200" style="width: 100%"></div>
+                    </div>
+                    <div class="text-yellow-400 font-bold text-sm mt-2 hud-text">CREDITS: <span id="coin-display">0</span></div>
+                    <div class="flex flex-col mt-3" id="status-hud"></div>
+                </div>
+                <div class="pause-btn" onclick="game.togglePause()">
+                    <svg width="14" height="18" viewBox="0 0 14 18" fill="currentColor"><rect width="4" height="18" /><rect x="10" width="4" height="18" /></svg>
+                </div>
+            </div>
+            <div id="combo-container"><div id="combo-count">COMBO x1</div><div id="combo-bar-bg"><div id="combo-bar-fill"></div></div></div>
+            <div id="level-notification">LEVEL 1</div>
+            <div id="active-controls" class="absolute bottom-6 right-6 flex flex-col gap-4 pointer-events-auto">
+                <button id="btn-shield" class="control-btn" onclick="game.activatePowerup('shield')">
+                    <span class="text-2xl">🛡️</span>
+                    <span id="count-shield" class="control-badge">0</span>
+                    <span class="key-hint hidden md-block">Q</span>
+                </button>
+                <button id="btn-laser" class="control-btn" onclick="game.activatePowerup('laser')">
+                    <span class="text-2xl">⚡</span>
+                    <span id="count-laser" class="control-badge">0</span>
+                    <span class="key-hint hidden md-block">E</span>
+                </button>
+                <button id="btn-regen" class="control-btn" onclick="game.activatePowerup('regen')">
+                    <span class="text-2xl">➕</span>
+                    <span id="count-regen" class="control-badge">0</span>
+                    <span class="key-hint hidden md-block">R</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- GAME OVER SCREEN -->
+        <div id="gameover-screen" class="screen">
+            <div class="menu-panel border-red-500 border-t-2 border-b-2">
+                <h1 class="text-4xl md-text-5xl text-red-500 font-black mb-2 tracking-widest text-center">CRITICAL FAILURE</h1>
+                <p class="text-white text-xl mb-6 font-mono">SCORE: <span id="final-score" class="text-cyan-400">0</span></p>
+                <div class="bg-gray-900\/50 p-4 rounded border border-gray-700 mb-8 w-full text-center">
+                    <p class="text-gray-400 text-xs uppercase mb-1">Salvage Value</p>
+                    <p class="text-yellow-400 text-2xl font-bold">+<span id="coins-earned">0</span> CREDITS</p>
+                </div>
+                <button class="btn" onclick="game.start()">RETRY MISSION</button>
+                <button class="btn btn-red" onclick="game.openMenu()">MAIN MENU</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- YouTube Playables SDK (no-op when served locally) -->
+    <script src="https://www.youtube.com/game_api/v1"></script>
+    <script src="js/phaser.min.js"></script>
+    <script src="phaser-game.js"></script>
+    <script>
+        // === INPUT HANDLERS ===
+        const input = { keys: {}, gamepadIndex: null };
+        window.addEventListener('keydown', e => {
+            input.keys[e.key.toLowerCase()] = true; input.keys[e.code] = true;
+            if (e.key === 'Escape' || e.key.toLowerCase() === 'p') game.togglePause();
+            if (e.key === 'q' || e.key === '1') game.activatePowerup('shield');
+            if (e.key === 'e' || e.key === '2') game.activatePowerup('laser');
+            if (e.key === 'r' || e.key === '3') game.activatePowerup('regen');
+        });
+        window.addEventListener('keyup', e => { input.keys[e.key.toLowerCase()] = false; input.keys[e.code] = false; });
+        window.addEventListener('gamepadconnected', e => { input.gamepadIndex = e.gamepad.index; });
+        window.addEventListener('gamepaddisconnected', () => { input.gamepadIndex = null; });
+
+        // === HUD UPDATE ===
+        function updateHUD() {
+            document.getElementById('score-display').innerText = score;
+            document.getElementById('coin-display').innerText = SaveSystem.data.coins;
+            const hpPercent = Math.max(0, (player.hp / player.maxHp) * 100);
+            const hpBar = document.getElementById('health-bar');
+            hpBar.style.width = hpPercent + '%';
+            hpBar.className = hpPercent < 30 
+                ? "absolute top-0 left-0 h-full bg-gradient-to-r from-red-600 to-red-400 transition-all duration-200 animate-pulse" 
+                : "absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-200";
+
+            const statusContainer = document.getElementById('status-hud');
+            statusContainer.innerHTML = '';
+            if (player.scoreMult > 1) { const mSecs = Math.ceil(player.scoreMultTimer/60); statusContainer.innerHTML += `<div class="status-icon text-yellow-400 border-yellow-400 animate-pulse"><span class="mr-2">X2</span> BONUS: ${mSecs}s</div>`; }
+            if (player.shieldHp > 0) { statusContainer.innerHTML += `<div class="status-icon text-cyan-400 border-cyan-400"><span class="mr-2">\u{1F6E1}\u{FE0F}</span> SHIELD: ${player.shieldHp}</div>`; }
+            if (player.laserTimer > 0) { const secs = Math.ceil(player.laserTimer/60); statusContainer.innerHTML += `<div class="status-icon text-pink-400 border-pink-400"><span class="mr-2">\u26A1</span> LASER: ${secs}s</div>`; }
+
+            const shieldBtn = document.getElementById('btn-shield');
+            const laserBtn = document.getElementById('btn-laser');
+            const regenBtn = document.getElementById('btn-regen');
+            document.getElementById('count-shield').innerText = SaveSystem.data.inventory.shield;
+            document.getElementById('count-laser').innerText = SaveSystem.data.inventory.laser;
+            document.getElementById('count-regen').innerText = SaveSystem.data.inventory.regen;
+            if (SaveSystem.data.inventory.shield > 0) shieldBtn.classList.add('active'); else shieldBtn.classList.remove('active');
+            if (SaveSystem.data.inventory.laser > 0) laserBtn.classList.add('active'); else laserBtn.classList.remove('active');
+            if (SaveSystem.data.inventory.regen > 0) regenBtn.classList.add('active'); else regenBtn.classList.remove('active');
+
+            const comboEl = document.getElementById('combo-container');
+            const comboFill = document.getElementById('combo-bar-fill');
+            const comboCount = document.getElementById('combo-count');
+            if (player.combo > 1) { comboEl.classList.add('active'); comboCount.innerText = `COMBO x${player.combo}`; comboFill.style.width = (player.comboTimer / 180 * 100) + '%'; } else { comboEl.classList.remove('active'); }
+        }
+        window.updateHUD = updateHUD;
+
+        // === GAME CONTROLLER ===
+        var game = {
+            init: () => {
+                SaveSystem.load();
+                setTimeout(() => { document.getElementById('boot-screen').classList.remove('active'); game.openMenu(); }, 2200);
+                const unlockAudio = () => { SoundManager.init(); document.body.removeEventListener('click', unlockAudio); document.body.removeEventListener('touchstart', unlockAudio); };
+                document.body.addEventListener('click', unlockAudio);
+                document.body.addEventListener('touchstart', unlockAudio);
+            },
+            
+            notify: (msg, type = 'success') => {
+                const container = document.getElementById('notifications');
+                const el = document.createElement('div');
+                el.className = `notification ${type === 'error' ? 'notify-error' : 'notify-success'}`;
+                el.innerText = msg;
+                container.appendChild(el);
+                if (type === 'error') SoundManager.playShieldHit(); else SoundManager.playUI(); 
+                setTimeout(() => { el.remove(); }, 3000);
+            },
+
+            updateVolume: (type) => {
+                if(type === 'sfx') {
+                    SaveSystem.data.settings.sfxVolume = parseFloat(document.getElementById('sfx-slider').value);
+                    document.getElementById('sfx-vol-val').innerText = Math.round(SaveSystem.data.settings.sfxVolume * 100) + '%';
+                } else if(type === 'music') {
+                    SaveSystem.data.settings.musicVolume = parseFloat(document.getElementById('music-slider').value);
+                    document.getElementById('music-vol-val').innerText = Math.round(SaveSystem.data.settings.musicVolume * 100) + '%';
+                    SoundManager.updateVolumes();
+                }
+                SaveSystem.save();
+            },
+            
+            openMenu: () => { 
+                SoundManager.playUI(); currentState = GAME_STATE.MENU; game.hideAllScreens(); 
+                document.getElementById('menu-screen').classList.add('active'); 
+                document.getElementById('high-score-display').innerText = `HIGH SCORE: ${SaveSystem.data.highScore}`; 
+                document.getElementById('hud').classList.add('hidden'); 
+
+                // Signal game ready to YouTube SDK on first menu open
+                if (!game._gameReadySent) {
+                    YTPlayables.gameReady();
+                    game._gameReadySent = true;
+                }
+            },
+
+            start: () => {
+                SoundManager.init(); SoundManager.playUI(); currentState = GAME_STATE.PLAYING; score = 0; level = 1;
+                
+                const shipId = SaveSystem.data.currentShip;
+                const shipLevel = SaveSystem.data.shipLevels[shipId];
+                player.config = SHIPS.find(s => s.id === shipId) || SHIPS[0];
+                player.maxHp = player.config.health + (shipLevel - 1) * 50; player.hp = player.maxHp; player.fireRate = Math.max(2, player.config.fireRate - (shipLevel - 1) * 3);
+                player.damage = player.config.damage + (shipLevel - 1);
+                player.x = width / 2; player.y = height - 100; player.targetX = player.x; player.targetY = player.y;
+                player.shieldHp = 0; player.laserTimer = 0; player.scoreMult = 1; player.scoreMultTimer = 0; player.combo = 0; player.comboTimer = 0;
+
+                game.hideAllScreens(); document.getElementById('hud').classList.remove('hidden'); updateHUD();
+                
+                // Start Phaser Mission
+                if (window.phaserScene) {
+                    window.phaserScene.startMission(shipId);
+                }
+            },
+
+            activatePowerup: (type) => {
+                if (currentState !== GAME_STATE.PLAYING && currentState !== GAME_STATE.PAUSED) return;
+                if (SaveSystem.data.inventory[type] <= 0) return;
+                const lvl = SaveSystem.data.powerupLevels[type] || 1;
+                if (type === 'shield') { player.shieldHp += (3 + (lvl - 1) * 2); SoundManager.playPowerup(); } 
+                else if (type === 'laser') { player.laserTimer = (600 + (lvl - 1) * 300); SoundManager.playPowerup(); }
+                else if (type === 'regen') { 
+                    const heal = 50 + (lvl - 1) * 25; 
+                    player.hp = Math.min(player.maxHp, player.hp + heal); 
+                    SoundManager.playPowerup(); 
+                }
+                SaveSystem.data.inventory[type]--; updateHUD();
+            },
+
+            gameOver: () => {
+                currentState = GAME_STATE.GAMEOVER;
+                SoundManager.stopMusic();
+                const earnedCoins = Math.floor(score / 10);
+                SaveSystem.data.coins += earnedCoins;
+                if (score > SaveSystem.data.highScore) SaveSystem.data.highScore = score;
+                SaveSystem.save(); 
+                document.getElementById('final-score').innerText = score;
+                document.getElementById('coins-earned').innerText = earnedCoins;
+                setTimeout(() => { game.hideAllScreens(); document.getElementById('gameover-screen').classList.add('active'); }, 1000);
+            },
+
+            levelUp: () => {
+                level++; const notif = document.getElementById('level-notification'); notif.innerText = `LEVEL ${level}`; notif.classList.add('show'); SoundManager.playPowerup(); setTimeout(() => notif.classList.remove('show'), 2000);
+            },
+            togglePause: () => {
+                SoundManager.playUI();
+                if (currentState === GAME_STATE.PLAYING) { currentState = GAME_STATE.PAUSED; document.getElementById('pause-screen').classList.add('active'); SoundManager.stopMusic(); } 
+                else if (currentState === GAME_STATE.PAUSED) { currentState = GAME_STATE.PLAYING; document.getElementById('pause-screen').classList.remove('active'); if(SaveSystem.data.settings.musicVolume > 0) SoundManager.startMusic(); }
+            },
+
+            quitToMenu: () => { SoundManager.playUI(); game.openMenu(); },
+            openShop: () => { SoundManager.playUI(); game.hideAllScreens(); document.getElementById('shop-screen').classList.add('active'); game.renderShop(); },
+            openSettings: () => { SoundManager.playUI(); game.hideAllScreens(); document.getElementById('settings-screen').classList.add('active'); },
+
+            renderShop: () => {
+                document.getElementById('shop-coins').innerText = SaveSystem.data.coins;
+                const shipContainer = document.getElementById('ships-container'); shipContainer.innerHTML = '';
+                SHIPS.forEach(ship => {
+                    const isUnlocked = SaveSystem.data.unlockedShips.includes(ship.id);
+                    const isEquipped = SaveSystem.data.currentShip === ship.id;
+                    const shipLvl = SaveSystem.data.shipLevels[ship.id] || 1;
+                    const el = document.createElement('div'); el.className = `shop-item ${isEquipped ? 'selected' : ''} ${!isUnlocked ? 'locked' : ''}`;
+                    const currentFr = Math.max(2, ship.fireRate - (shipLvl - 1) * 3); const currentHp = ship.health + (shipLvl - 1) * 50;
+                    const currentDmg = ship.damage + (shipLvl - 1);
+                    const frPct = ((18 - currentFr) / 16) * 100; const hpPct = (currentHp / 350) * 100;
+                    const dmgPct = (currentDmg / 6) * 100;
+
+                    let actionBtn = '';
+                    if (isUnlocked) {
+                        const upgradeCost = ship.upgradeCost * shipLvl;
+                        const canUpgrade = SaveSystem.data.coins >= upgradeCost && shipLvl < ship.maxLevel;
+                        const upgradeText = shipLvl >= ship.maxLevel ? "MAX LEVEL" : `UPGRADE (${upgradeCost})`;
+                        let equipBtn = isEquipped ? `<div class="text-green-400 font-bold text-center border border-green-500 py-1 rounded bg-green-900\/20 text-xs mb-2">ACTIVE</div>` : `<button class="w-full bg-cyan-900\/40 border border-cyan-500 text-cyan-400 py-1 mb-2 rounded hover-cyan transition-colors text-xs" onclick="game.equipShip(${ship.id})">EQUIP</button>`;
+                        let upgradeBtn = shipLvl >= ship.maxLevel ? `<div class="text-gray-500 text-center text-xs py-1">MAXED OUT</div>` : `<button class="w-full ${canUpgrade ? 'bg-yellow-600 hover-yellow text-white' : 'bg-gray-800 text-gray-500'} py-1 rounded text-xs" onclick="game.upgradeShip(${ship.id})" ${!canUpgrade ? 'disabled' : ''}>${upgradeText}</button>`;
+                        actionBtn = equipBtn + upgradeBtn;
+                    } else {
+                        const canBuy = SaveSystem.data.coins >= ship.cost;
+                        actionBtn = `<button class="w-full ${canBuy ? 'bg-yellow-600 hover-yellow text-white' : 'bg-gray-800 text-gray-500'} py-2 mt-3 rounded transition-colors font-bold" onclick="game.buyShip(${ship.id})" ${!canBuy ? 'disabled' : ''}>UNLOCK: ${ship.cost}</button>`;
+                    }
+                    el.innerHTML = `<div class="flex items-center mb-2"><div class="w-10 h-10 rounded bg-gray-900 border border-gray-700 mr-3 flex items-center justify-center"><svg width="24" height="24" viewBox="0 0 50 50">${ship.svg}</svg></div><div><div class="text-white font-bold text-sm leading-none">${ship.name}</div><div class="text-xs text-yellow-400">LVL ${shipLvl}</div></div></div><div class="mb-2 space-y-1"><div class="stat-row"><div class="stat-label">DMG</div><div class="stat-track"><div class="stat-fill" style="width: ${dmgPct}%"></div></div></div><div class="stat-row"><div class="stat-label">ROF</div><div class="stat-track"><div class="stat-fill" style="width: ${frPct}%"></div></div></div><div class="stat-row"><div class="stat-label">HULL</div><div class="stat-track"><div class="stat-fill" style="width: ${hpPct}%"></div></div></div></div><div class="text-xs text-gray-400 mb-2 h-8 leading-tight overflow-hidden">${ship.desc}</div>${actionBtn}`;
+                    shipContainer.appendChild(el);
+                });
+
+                const puContainer = document.getElementById('powerups-container'); puContainer.innerHTML = '';
+                POWERUPS.forEach(pu => {
+                    const count = SaveSystem.data.inventory[pu.id] || 0;
+                    const puLvl = SaveSystem.data.powerupLevels[pu.id] || 1;
+                    const el = document.createElement('div'); el.className = `shop-item ${count > 0 ? 'owned-pu' : ''}`;
+                    const canAffordStock = SaveSystem.data.coins >= pu.cost;
+                    const upgradeCost = pu.upgradeCost * puLvl;
+                    const canUpgrade = SaveSystem.data.coins >= upgradeCost && puLvl < pu.maxLevel;
+                    const upgradeText = puLvl >= pu.maxLevel ? "MAX" : `UPG (${upgradeCost})`;
+                    el.innerHTML = `<div class="flex justify-between items-start mb-1"><div class="text-white font-bold text-sm">${pu.name} <span class="text-yellow-400 text-xs ml-1">LVL ${puLvl}</span></div><div class="text-xl">${pu.icon}</div></div><div class="text-xs text-gray-400 mb-2 h-8 leading-tight">${pu.desc}</div><div class="text-sm text-purple-400 font-bold mb-2">STOCK: ${count}</div><div class="flex gap-2"><button class="flex-1 ${canAffordStock ? 'bg-purple-900\/40 border border-purple-500 hover-purple text-purple-100' : 'bg-gray-800 text-gray-500'} py-1 rounded text-xs" onclick="game.buyPowerup('${pu.id}')" ${!canAffordStock ? 'disabled' : ''}>BUY (${pu.cost})</button><button class="flex-1 ${canUpgrade ? 'bg-yellow-600 hover-yellow text-white' : 'bg-gray-800 text-gray-500'} py-1 rounded text-xs" onclick="game.upgradePowerup('${pu.id}')" ${!canUpgrade || puLvl >= pu.maxLevel ? 'disabled' : ''}>${upgradeText}</button></div>`;
+                    puContainer.appendChild(el);
+                });
+            },
+
+            buyShip: (id) => {
+                const ship = SHIPS.find(s => s.id === id);
+                if (SaveSystem.data.coins >= ship.cost) { SoundManager.playPowerup(); SaveSystem.data.coins -= ship.cost; SaveSystem.data.unlockedShips.push(id); SaveSystem.save(); game.renderShop(); game.notify(`${ship.name} UNLOCKED`, 'success'); } else { game.notify("INSUFFICIENT CREDITS", 'error'); }
+            },
+            equipShip: (id) => { SoundManager.playUI(); SaveSystem.data.currentShip = id; SaveSystem.save(); game.renderShop(); },
+            upgradeShip: (id) => {
+                const ship = SHIPS.find(s => s.id === id); const currentLvl = SaveSystem.data.shipLevels[id]; const cost = ship.upgradeCost * currentLvl;
+                if (SaveSystem.data.coins >= cost && currentLvl < ship.maxLevel) { SoundManager.playPowerup(); SaveSystem.data.coins -= cost; SaveSystem.data.shipLevels[id]++; SaveSystem.save(); game.renderShop(); game.notify("SHIP UPGRADED", 'success'); } 
+                else { if(currentLvl >= ship.maxLevel) game.notify("MAX LEVEL REACHED", 'error'); else game.notify("INSUFFICIENT CREDITS", 'error'); }
+            },
+            buyPowerup: (id) => {
+                const pu = POWERUPS.find(p => p.id === id);
+                if (SaveSystem.data.coins >= pu.cost) { SoundManager.playPowerup(); SaveSystem.data.coins -= pu.cost; SaveSystem.data.inventory[id]++; SaveSystem.save(); game.renderShop(); game.notify(`${pu.name} ACQUIRED`, 'success'); } else { game.notify("INSUFFICIENT CREDITS", 'error'); }
+            },
+            upgradePowerup: (id) => {
+                const pu = POWERUPS.find(p => p.id === id); const currentLvl = SaveSystem.data.powerupLevels[id]; const cost = pu.upgradeCost * currentLvl;
+                if (SaveSystem.data.coins >= cost && currentLvl < pu.maxLevel) { SoundManager.playPowerup(); SaveSystem.data.coins -= cost; SaveSystem.data.powerupLevels[id]++; SaveSystem.save(); game.renderShop(); game.notify("UPGRADE SUCCESSFUL", 'success'); } 
+                else { if(currentLvl >= pu.maxLevel) game.notify("MAX LEVEL REACHED", 'error'); else game.notify("INSUFFICIENT CREDITS", 'error'); }
+            },
+            hideAllScreens: () => { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); },
+
+            _gameReadySent: false
+        };
+        window.game = game;
+
+        // === YouTube Playables - Pause/Resume Hooks ===
+        YTPlayables.onPause(() => { if (currentState === GAME_STATE.PLAYING) game.togglePause(); });
+        YTPlayables.onResume(() => { if (currentState === GAME_STATE.PAUSED) game.togglePause(); });
+        YTPlayables.onAudioEnabledChange((enabled) => {
+            if (!enabled) { SoundManager.mute(); }
+            else { SoundManager.updateVolumes(); }
+        });
+
+        // === Pause on Focus Loss ===
+        window.addEventListener('blur', () => { if (currentState === GAME_STATE.PLAYING) game.togglePause(); });
+        document.addEventListener('visibilitychange', () => { if (document.hidden && currentState === GAME_STATE.PLAYING) game.togglePause(); });
+
+        // === INITIALIZE ===
+        updateHUD();
+        game.init();
+
+    </script>
+</body>
+</html>
